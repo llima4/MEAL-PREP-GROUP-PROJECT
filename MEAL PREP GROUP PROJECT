@@ -1,0 +1,143 @@
+from pulp import *  # Linear programming/optimization
+from scipy import * # Scientific computing tools
+import numpy as np  # Scientific computing tools
+import pandas as pd # Data management
+
+# Begin entering code below
+
+from google.colab import files
+files.upload()
+df = pd.read_csv("Ingredient_Data_Formatted.csv")
+
+df.loc[:, 'Avg. Price'] = df['Avg. Price'].replace('[\$,]', '', regex=True).astype(float)
+df['Ingredient'] = df['Ingredient'].str.replace(r'^\d+\.', '', regex=True).str.strip()
+df.head(30)
+
+constraints = {
+    "min_calories": 2000 * 7,   # weekly calories
+    "min_protein": 80 * 7,     # weekly protein (g)
+    "max_fat": 70 * 7,          # weekly fat (g)
+    "diet": "None"        # options: None, vegetarian, vegan
+}
+
+# Food group minimum servings (per week)
+group_minimums = {
+    "Protein": 2,
+    "Carbs": 2,
+    "Produce": 2,
+    "Dairy & Fats": 2
+}
+
+min_distinct_foods = 5
+
+if constraints["diet"] == "Vegetarian":
+    df = df[df["Vegetarian"] == True]
+elif constraints["diet"] == "Vegan":
+    df = df[df["Vegan"] == True]
+
+df = df.reset_index(drop=True)
+
+# Define LP problem
+prob = pulp.LpProblem("Meal_Plan", LpMinimize)
+
+# Decision variables
+x = {i: pulp.LpVariable(f"x_{i}", lowBound=0, cat="Integer") for i in range(len(df))}
+y = {i: pulp.LpVariable(f"y_{i}", cat="Binary") for i in range(len(df))}
+
+# Slack variables (for feasibility)
+slack_cal = pulp.LpVariable("slack_cal", lowBound=0)
+slack_protein = pulp.LpVariable("slack_protein", lowBound=0)
+
+# Objective Function
+penalty = 1000 # Penalize slack heavily
+
+prob += (
+    pulp.lpSum(x[i] * df.loc[i, "Avg. Price"] for i in range(len(df)))
+    + penalty * slack_cal
+    + penalty * slack_protein
+)
+
+# Nutrition Constraints
+prob += pulp.lpSum(
+    x[i] * df.loc[i, "Cal"] for i in range(len(df))
+) >= constraints["min_calories"]
+
+prob += pulp.lpSum(
+    x[i] * df.loc[i, "Protein (g)"] for i in range(len(df))
+) >= constraints["min_protein"]
+
+prob += pulp.lpSum(
+    x[i] * df.loc[i, "Fat (g)"] for i in range(len(df))
+) <= constraints["max_fat"]
+
+# Food group constraints (Soft)
+group_slack = {}
+
+for group, min_val in group_minimums.items():
+    group_slack[group] = pulp.LpVariable(f"slack_{group}", lowBound=0)
+
+    prob += (
+        pulp.lpSum(
+            x[i] for i in range(len(df))
+            if df.loc[i, "Food Group"] == group
+        )
+        + group_slack[group]
+        >= min_val
+    )
+
+    # Penalize slack
+    prob += penalty * group_slack[group]
+
+# Variety constraints
+M = 50
+
+for i in range(len(df)):
+    prob += x[i] <= M * y[i]
+    prob += x[i] >= y[i]
+
+prob += pulp.lpSum(y[i] for i in range(len(df))) >= min_distinct_foods
+
+for i in range(len(df)): # Ingredient upper bound
+    prob += x[i] <= 3
+
+# Solve
+prob.solve()
+
+# Output results
+print("Status:", LpStatus[prob.status])
+print("\nOptimal Weekly Meal Plan:\n")
+
+total_cost = 0
+
+for i in range(len(df)):
+    if x[i].value() > 0:
+        name = df.loc[i, "Ingredient"]
+        qty = int(x[i].value())
+        unit_size = df.loc[i, "Unit"]
+        cost = qty * df.loc[i, "Avg. Price"]
+        total_cost += cost
+        print(f"{name}: {qty} units (Cost: ${cost:.2f})")
+
+print(f"\nTotal Cost: ${total_cost:.2f}")
+
+
+total_calories = sum(
+    x[i].value() * df.loc[i, "Cal"]
+    for i in range(len(df))
+)
+
+total_protein = sum(
+    x[i].value() * df.loc[i, "Protein (g)"]
+    for i in range(len(df))
+)
+
+total_fat = sum(
+    x[i].value() * df.loc[i, "Fat (g)"]
+    for i in range(len(df))
+)
+
+print("\n--- Nutrition Summary ---")
+print(f"Total Calories: {total_calories:.2f}")
+print(f"Total Protein: {total_protein:.2f} g")
+print(f"Total Fat: {total_fat:.2f} g")
+
