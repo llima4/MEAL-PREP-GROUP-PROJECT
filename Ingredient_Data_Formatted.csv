@@ -1,0 +1,31 @@
+Ingredient,Avg. Price,Unit,Cal,Protein (g),Sod. (mg),Chol. (mg),Fat (g),Fiber (g),Gluten-free,Vegetarian,Vegan,Food Group
+1. White Rice,$1.05,1 lb,1650,32,5,0,3,4,TRUE,TRUE,TRUE,Carb
+2. Brown Rice,$1.35,1 lb,1620,35,5,0,12,16,TRUE,TRUE,TRUE,Carb
+3. Oatmeal,$2.10,1 lb,1720,60,10,0,30,45,FALSE,TRUE,TRUE,Carb
+4. Whole Wheat Pasta,$1.65,1 lb,1580,60,15,0,10,32,FALSE,TRUE,TRUE,Carb
+5. Russet Potatoes,$0.95,1 lb,350,9,20,0,0.5,8,TRUE,TRUE,TRUE,Carb
+6. Sweet Potatoes,$1.40,1 lb,390,7,250,0,0.5,14,TRUE,TRUE,TRUE,Carb
+7. Quinoa,$4.50,1 lb,1700,64,20,0,28,32,TRUE,TRUE,TRUE,Carb
+8. Whole Wheat Bread,$3.25,20oz Loaf,1400,70,2600,0,20,40,FALSE,TRUE,TRUE,Carb
+9. Eggs (Large),$2.50,1 Dozen,840,72,840,2230,60,0,TRUE,TRUE,FALSE,Protein
+10. Chicken Breast,$4.10,1 lb,750,140,340,385,16,0,TRUE,FALSE,FALSE,Protein
+11. Ground Beef (80%),$6.75,1 lb,1150,78,300,320,90,0,TRUE,FALSE,FALSE,Protein
+12. Canned Tuna,$1.35,5 oz can,130,30,320,40,1,0,TRUE,FALSE,FALSE,Protein
+13. Tofu (Firm),$2.95,14 oz,320,36,20,0,18,4,TRUE,TRUE,TRUE,Protein
+14. Black Beans,$1.45,1 lb dry,1540,95,22,0,6,70,TRUE,TRUE,TRUE,Protein
+15. Lentils (Red/Br),$1.60,1 lb dry,1590,110,25,0,4,48,TRUE,TRUE,TRUE,Protein
+16. Chickpeas,$1.55,1 lb dry,1650,85,110,0,27,77,TRUE,TRUE,TRUE,Protein
+17. Whole Milk,$4.05,1 Gal,2400,128,1680,380,128,0,TRUE,TRUE,FALSE,Dairy & Fats
+18. Greek Yogurt,$5.20,32 oz,540,90,320,45,0,0,TRUE,TRUE,FALSE,Dairy & Fats
+19. Cheddar Cheese,$4.50,8 oz,900,56,1400,220,72,0,TRUE,TRUE,FALSE,Dairy & Fats
+20. Peanut Butter,$3.20,16 oz,2650,110,1900,0,225,28,TRUE,TRUE,TRUE,Dairy & Fats
+21. Olive Oil,$11.50,16.9 oz,4000,0,0,0,450,0,TRUE,TRUE,TRUE,Dairy & Fats
+22. Butter (Salted),$4.80,1 lb,3200,4,2500,860,360,0,TRUE,TRUE,FALSE,Dairy & Fats
+23. Spinach (Fresh),$2.75,10 oz,65,8,220,0,1,6,TRUE,TRUE,TRUE,Produce
+24. Carrots (Whole),$1.10,1 lb,185,4,310,0,1,13,TRUE,TRUE,TRUE,Produce
+25. Broccoli,$2.40,1 lb,150,12,150,0,1.5,11,TRUE,TRUE,TRUE,Produce
+26. Onions (Yellow),$1.20,1 lb,180,5,18,0,0.5,8,TRUE,TRUE,TRUE,Produce
+27. Bananas,$0.65,1 lb,400,5,5,0,1.5,12,TRUE,TRUE,TRUE,Produce
+28. Apples (Gala),$1.95,1 lb,240,1,5,0,1,11,TRUE,TRUE,TRUE,Produce
+29. Frozen Peas,$1.85,12 oz,270,18,360,0,1,15,TRUE,TRUE,TRUE,Produce
+30. Canned Tomatoes,$1.25,14.5 oz,90,4,550,0,0,6,TRUE,TRUE,TRUE,Produce
