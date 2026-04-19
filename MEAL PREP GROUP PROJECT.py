@@ -464,7 +464,7 @@ class App:
         for name, qty, cost, grp in items:
             self.output.insert(
                 tk.END,
-                f"{name:<18}|{grp:<13}|{qty} units |{unit:<10}|${cost:.2f} |\n""
+                f"{name:<18}|{grp:<13}|{qty} units |{unit:<10}|${cost:.2f} |\n"
             )
 
         self.output.insert(
