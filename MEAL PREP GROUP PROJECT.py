@@ -4,27 +4,30 @@
 # In[53]:
 
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import pandas as pd
-import pulp
-import requests
+import tkinter as tk  # standard Python GUI library
+from tkinter import ttk, filedialog, messagebox  # themed widgets + file dialogs + popups
+import pandas as pd  # data handling (tables / CSVs)
+import pulp  # linear programming / optimization solver
+import requests  # used for making API calls to fetch prices
 
 # =========================
 # CONFIG
 # =========================
-API_KEY = "YOUR_API_KEY_HERE"  # for price API (RapidAPI or Kroger)
+API_KEY = "YOUR_API_KEY_HERE"  # placeholder for an API key used to fetch prices online
 
 # =========================
 # LOAD DATA
 # =========================
 def load_data(filepath):
-    df = pd.read_csv(filepath)
+    df = pd.read_csv(filepath)  # read CSV file into a pandas DataFrame
 
+    # remove dollar signs and commas from price column and convert to float
     df['Avg. Price'] = df['Avg. Price'].replace('[$,]', '', regex=True).astype(float)
+
+    # clean ingredient names by removing numbering like "1. Chicken"
     df['Ingredient'] = df['Ingredient'].str.replace(r'^\d+\.', '', regex=True).str.strip()
 
-    return df
+    return df  # return cleaned DataFrame
 
 
 # In[54]:
@@ -39,29 +42,32 @@ def fetch_price_online(ingredient):
     Replace with real endpoint.
     """
     try:
-        url = "https://api.example.com/price"
-        headers = {"X-API-Key": API_KEY}
+        url = "https://api.example.com/price"  # placeholder API endpoint
+        headers = {"X-API-Key": API_KEY}  # authentication header
 
+        # send GET request with ingredient name as query parameter
         response = requests.get(url, headers=headers, params={"query": ingredient})
 
+        # if request is successful
         if response.status_code == 200:
-            data = response.json()
-            return float(data["price"])
+            data = response.json()  # parse JSON response
+            return float(data["price"])  # return price from API
     except:
-        pass
+        pass  # silently ignore any errors
 
-    return None  # fallback if fails
+    return None  # return None if API fails
 
 
 def update_prices(df):
+    # loop through every row in the DataFrame
     for i in range(len(df)):
-        ingredient = df.loc[i, "Ingredient"]
-        new_price = fetch_price_online(ingredient)
+        ingredient = df.loc[i, "Ingredient"]  # get ingredient name
+        new_price = fetch_price_online(ingredient)  # fetch updated price
 
-        if new_price:
-            df.loc[i, "Avg. Price"] = new_price
+        if new_price:  # if API returned a valid price
+            df.loc[i, "Avg. Price"] = new_price  # update DataFrame
 
-    return df
+    return df  # return updated DataFrame
 
 
 # =====================================================
@@ -70,10 +76,10 @@ def update_prices(df):
 # =====================================================
 DIETS = {
     "High Protein": {
-        "calories": 2000 * 7,
-        "protein": 150 * 7,
-        "fat": 80 * 7,
-        "groups": {
+        "calories": 2000 * 7,  # weekly calories
+        "protein": 150 * 7,    # weekly protein
+        "fat": 80 * 7,         # max weekly fat
+        "groups": {            # minimum servings per food group
             "protein": 14,
             "carb": 10,
             "fat": 5,
@@ -138,26 +144,26 @@ DIETS = {
 # OPTIMIZER
 # =====================================================
 def optimize(df, calories, protein, fat, group_mins):
-    prob = pulp.LpProblem("MealPlan", pulp.LpMinimize)
+    prob = pulp.LpProblem("MealPlan", pulp.LpMinimize)  # create minimization problem
 
-    n = len(df)
+    n = len(df)  # number of food items
 
     # -------------------------------------------------
     # Decision variables
     # -------------------------------------------------
-    # servings of each food
+    # number of servings for each food item
     x = [
         pulp.LpVariable(f"x{i}", lowBound=0, cat="Integer")
         for i in range(n)
     ]
 
-    # binary usage variables (food selected or not)
+    # binary variable: whether food i is used or not
     y = [
         pulp.LpVariable(f"y{i}", cat="Binary")
         for i in range(n)
     ]
 
-    # slack for soft food-group constraints
+    # slack variables allow violating group constraints with penalty
     slack = {
         grp: pulp.LpVariable(f"slack_{grp}", lowBound=0)
         for grp in group_mins
@@ -166,35 +172,38 @@ def optimize(df, calories, protein, fat, group_mins):
     # -------------------------------------------------
     # Parameters
     # -------------------------------------------------
-    PENALTY = 1000      # soft group penalty
-    BIG_M = 50         # max servings if selected
-    MIN_DISTINCT = 15   # required number of different foods
+    PENALTY = 1000      # penalty for violating group constraints
+    BIG_M = 50          # max servings allowed if food is selected
+    MIN_DISTINCT = 15   # minimum number of different foods
 
     # -------------------------------------------------
     # Objective
     # -------------------------------------------------
     prob += (
-        pulp.lpSum(
+        pulp.lpSum(  # minimize total cost
             x[i] * df.loc[i, "Avg. Price"]
             for i in range(n)
         )
         +
-        PENALTY * pulp.lpSum(slack[g] for g in slack)
+        PENALTY * pulp.lpSum(slack[g] for g in slack)  # penalty for slack usage
     )
 
     # -------------------------------------------------
     # Hard Nutrition Constraints
     # -------------------------------------------------
+    # ensure minimum calories
     prob += pulp.lpSum(
         x[i] * df.loc[i, "Cal"]
         for i in range(n)
     ) >= calories
 
+    # ensure minimum protein
     prob += pulp.lpSum(
         x[i] * df.loc[i, "Protein (g)"]
         for i in range(n)
     ) >= protein
 
+    # ensure fat does not exceed limit
     prob += pulp.lpSum(
         x[i] * df.loc[i, "Fat (g)"]
         for i in range(n)
@@ -205,12 +214,12 @@ def optimize(df, calories, protein, fat, group_mins):
     # -------------------------------------------------
     for grp, minimum in group_mins.items():
         prob += (
-            pulp.lpSum(
+            pulp.lpSum(  # sum servings for that group
                 x[i]
                 for i in range(n)
                 if df.loc[i, "Food Group"] == grp
             )
-            + slack[grp]
+            + slack[grp]  # allow violation using slack
             >= minimum
         )
 
@@ -218,30 +227,30 @@ def optimize(df, calories, protein, fat, group_mins):
     # Distinct Foods Constraint
     # -------------------------------------------------
     for i in range(n):
-        prob += x[i] <= BIG_M * y[i]
-        prob += x[i] >= y[i]
+        prob += x[i] <= BIG_M * y[i]  # if y=0 then x must be 0
+        prob += x[i] >= y[i]          # if y=1 then x >=1
 
-    # At least 5 different foods used
+    # enforce minimum number of distinct foods
     prob += pulp.lpSum(y[i] for i in range(n)) >= MIN_DISTINCT
 
     # -------------------------------------------------
     # Solve
     # -------------------------------------------------
-    prob.solve(pulp.PULP_CBC_CMD(msg=0))
+    prob.solve(pulp.PULP_CBC_CMD(msg=0))  # solve using CBC solver
 
-    status = pulp.LpStatus[prob.status]
+    status = pulp.LpStatus[prob.status]  # get solution status
 
     # -------------------------------------------------
     # Build output
     # -------------------------------------------------
-    result = []
+    result = []  # store chosen foods
     total_cost = 0
 
     for i in range(n):
-        val = x[i].value()
+        val = x[i].value()  # get optimized value
 
         if val is not None and val > 0:
-            qty = int(round(val))
+            qty = int(round(val))  # round to integer servings
             cost = qty * df.loc[i, "Avg. Price"]
             total_cost += cost
 
@@ -255,6 +264,7 @@ def optimize(df, calories, protein, fat, group_mins):
                 )
             )
 
+    # compute total nutrition
     total_cal = sum(
         (x[i].value() or 0) * df.loc[i, "Cal"]
         for i in range(n)
@@ -270,6 +280,7 @@ def optimize(df, calories, protein, fat, group_mins):
         for i in range(n)
     )
 
+    # store slack values (how much constraints were violated)
     slack_vals = {
         g: slack[g].value() or 0
         for g in slack
@@ -294,27 +305,30 @@ def optimize(df, calories, protein, fat, group_mins):
 # =====================================================
 class App:
     def __init__(self, root):
-        self.root = root
-        self.df = None
+        self.root = root  # store root window
+        self.df = None    # will hold dataset
 
-        root.title("Meal Prep Optimizer")
-        root.geometry("760x700")
+        root.title("Meal Prep Optimizer")  # window title
+        root.geometry("760x700")  # window size
 
+        # button to load CSV file
         ttk.Button(
             root,
             text="Load CSV",
             command=self.load_file
         ).pack(pady=5)
 
+        # button to update prices via API
         ttk.Button(
             root,
             text="Update Prices (Internet)",
             command=self.update_prices_gui
         ).pack(pady=5)
 
-        # Diet preset dropdown
+        # variable to store selected diet
         self.diet_var = tk.StringVar()
 
+        # dropdown menu for diet selection
         self.combo = ttk.Combobox(
             root,
             textvariable=self.diet_var,
@@ -322,39 +336,43 @@ class App:
             state="readonly"
         )
         self.combo.pack(pady=5)
+
+        # trigger autofill when diet selected
         self.combo.bind("<<ComboboxSelected>>", self.autofill)
 
-        # Inputs
+        # input fields for constraints
         self.cal = self.make_entry("Min Calories / week")
         self.protein = self.make_entry("Min Protein (g) / week")
         self.fat = self.make_entry("Max Fat (g) / week")
 
+        # run optimization button
         ttk.Button(
             root,
             text="Run Optimization",
             command=self.run
         ).pack(pady=10)
 
-
+        # output text box for displaying results
         self.output = tk.Text(root, height=30, width=90)
         self.output.pack(padx=10, pady=10)
 
     def make_entry(self, label):
-        ttk.Label(self.root, text=label).pack()
-        e = ttk.Entry(self.root)
+        ttk.Label(self.root, text=label).pack()  # label for input
+        e = ttk.Entry(self.root)  # entry box
         e.pack()
-        return e
+        return e  # return entry widget
 
     def load_file(self):
+        # open file dialog to select CSV
         path = filedialog.askopenfilename(
             filetypes=[("CSV Files", "*.csv")]
         )
 
         if not path:
-            return
+            return  # exit if user cancels
 
         try:
-            self.df = load_data(path)
+            self.df = load_data(path)  # load dataset
             messagebox.showinfo(
                 "Success",
                 "CSV loaded successfully."
@@ -367,9 +385,9 @@ class App:
 
     def update_prices_gui(self):
         if self.df is None:
-            return
+            return  # do nothing if no data loaded
 
-        self.df = update_prices(self.df)
+        self.df = update_prices(self.df)  # update prices
 
         messagebox.showinfo(
             "Updated",
@@ -377,11 +395,12 @@ class App:
         )
 
     def autofill(self, event):
-        diet = self.diet_var.get()
+        diet = self.diet_var.get()  # get selected diet
 
         if diet in DIETS:
             vals = DIETS[diet]
 
+            # autofill input fields with preset values
             self.cal.delete(0, tk.END)
             self.cal.insert(0, vals["calories"])
 
@@ -400,6 +419,7 @@ class App:
             return
 
         try:
+            # read user input
             calories = float(self.cal.get())
             protein = float(self.protein.get())
             fat = float(self.fat.get())
@@ -412,10 +432,11 @@ class App:
 
         preset = self.diet_var.get()
 
+        # choose group constraints
         if preset in DIETS:
             group_mins = DIETS[preset]["groups"]
         else:
-            # Custom defaults
+            # default values for custom diet
             group_mins = {
                 "protein": 10,
                 "carb": 8,
@@ -423,6 +444,7 @@ class App:
                 "produce": 10
             }
 
+        # run optimizer
         (
             status,
             total_cost,
@@ -439,8 +461,10 @@ class App:
             group_mins
         )
 
+        # clear previous output
         self.output.delete(1.0, tk.END)
 
+        # display results
         self.output.insert(
             tk.END,
             f"Solver Status: {status}\n"
@@ -451,6 +475,7 @@ class App:
             f"Total Cost: ${total_cost:.2f}\n\n"
         )
 
+        # table header
         self.output.insert(
             tk.END,
             "MEAL PLAN\n"
@@ -462,12 +487,14 @@ class App:
             "-----------------------------------------------------------|\n"
         )
         
+        # print each selected food
         for name, qty, cost, grp, unit in items:
             self.output.insert(
                 tk.END,
                 f"{name:<18}|{grp:<13}|{qty} units |{unit:<10}|${cost:.2f} |\n"
             )
 
+        # print totals
         self.output.insert(
             tk.END,
             "-----------------------------------------------------------|\n"
@@ -495,7 +522,6 @@ class App:
 # =========================
 # RUN
 # =========================
-root = tk.Tk()
-app = App(root)
-root.mainloop()
-
+root = tk.Tk()  # create main window
+app = App(root)  # initialize app
+root.mainloop()  # start GUI event loop
