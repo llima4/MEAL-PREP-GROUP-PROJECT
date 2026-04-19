@@ -1,0 +1,203 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import pandas as pd
+import pulp
+import requests
+
+# =========================
+# CONFIG
+# =========================
+API_KEY = "YOUR_API_KEY_HERE"  # for price API (RapidAPI or Kroger)
+
+# =========================
+# LOAD DATA
+# =========================
+def load_data(filepath):
+    df = pd.read_csv(filepath)
+
+    df['Avg. Price'] = df['Avg. Price'].replace('[\$,]', '', regex=True).astype(float)
+    df['Ingredient'] = df['Ingredient'].str.replace(r'^\d+\.', '', regex=True).str.strip()
+
+    return df
+
+
+# In[2]:
+
+
+# =========================
+# INTERNET PRICE FETCHER
+# =========================
+def fetch_price_online(ingredient):
+    """
+    Example using a generic API structure.
+    Replace with real endpoint.
+    """
+    try:
+        url = "https://api.example.com/price"
+        headers = {"X-API-Key": API_KEY}
+
+        response = requests.get(url, headers=headers, params={"query": ingredient})
+
+        if response.status_code == 200:
+            data = response.json()
+            return float(data["price"])
+    except:
+        pass
+
+    return None  # fallback if fails
+
+
+def update_prices(df):
+    for i in range(len(df)):
+        ingredient = df.loc[i, "Ingredient"]
+        new_price = fetch_price_online(ingredient)
+
+        if new_price:
+            df.loc[i, "Avg. Price"] = new_price
+
+    return df
+
+
+# =========================
+# DIET PRESETS
+# =========================
+DIETS = {
+    "High Protein": (2000*7, 150*7, 80*7),
+    "Keto": (2000*7, 100*7, 150*7),
+    "Vegan": (2000*7, 80*7, 70*7),
+    "Vegetarian": (2000*7, 80*7, 70*7),
+    "Weight Loss": (1500*7, 100*7, 50*7)
+}
+
+
+# In[7]:
+
+
+# =========================
+# OPTIMIZER
+# =========================
+def optimize(df, calories, protein, fat):
+    prob = pulp.LpProblem("MealPlan", pulp.LpMinimize)
+
+    x = [pulp.LpVariable(f"x{i}", lowBound=0, cat="Integer") for i in range(len(df))]
+
+    prob += pulp.lpSum(x[i]*df.loc[i, "Avg. Price"] for i in range(len(df)))
+
+    prob += pulp.lpSum(x[i]*df.loc[i, "Cal"] for i in range(len(df))) >= calories
+    prob += pulp.lpSum(x[i]*df.loc[i, "Protein (g)"] for i in range(len(df))) >= protein
+    prob += pulp.lpSum(x[i]*df.loc[i, "Fat (g)"] for i in range(len(df))) <= fat
+
+    prob.solve(pulp.PULP_CBC_CMD(msg=0))
+
+    result = []
+    total_cost = 0
+
+    for i in range(len(df)):
+        if x[i].value() > 0:
+            qty = int(x[i].value())
+            cost = qty * df.loc[i, "Avg. Price"]
+            total_cost += cost
+
+            result.append((df.loc[i, "Ingredient"], qty, cost))
+
+    return total_cost, result
+
+
+# In[10]:
+
+
+# =========================
+# GUI
+# =========================
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.df = None
+
+        root.title("Meal Prep AI Optimizer")
+
+        ttk.Button(root, text="Load CSV", command=self.load_file).pack()
+
+        ttk.Button(root, text="Update Prices (Internet)", command=self.update_prices_gui).pack()
+
+        # Diet dropdown
+        self.diet_var = tk.StringVar()
+        self.combo = ttk.Combobox(root, textvariable=self.diet_var, values=list(DIETS.keys()) + ["Custom"])
+        self.combo.pack()
+        self.combo.bind("<<ComboboxSelected>>", self.autofill)
+
+        # Inputs
+        self.cal = self.make_entry("Calories/week")
+        self.protein = self.make_entry("Protein/week")
+        self.fat = self.make_entry("Max Fat/week")
+
+        ttk.Button(root, text="Run Optimization", command=self.run).pack()
+
+        self.output = tk.Text(root, height=20, width=70)
+        self.output.pack()
+
+    def make_entry(self, label):
+        ttk.Label(self.root, text=label).pack()
+        e = ttk.Entry(self.root)
+        e.pack()
+        return e
+
+    def load_file(self):
+        path = filedialog.askopenfilename()
+        self.df = load_data(path)
+        messagebox.showinfo("Loaded", "Data loaded successfully")
+
+    def update_prices_gui(self):
+        if self.df is None:
+            return
+        self.df = update_prices(self.df)
+        messagebox.showinfo("Updated", "Prices updated from internet")
+
+    def autofill(self, event):
+        diet = self.diet_var.get()
+
+        if diet in DIETS:
+            cal, prot, fat = DIETS[diet]
+
+            self.cal.delete(0, tk.END)
+            self.cal.insert(0, cal)
+
+            self.protein.delete(0, tk.END)
+            self.protein.insert(0, prot)
+
+            self.fat.delete(0, tk.END)
+            self.fat.insert(0, fat)
+
+    def run(self):
+        if self.df is None:
+            return
+
+        calories = float(self.cal.get())
+        protein = float(self.protein.get())
+        fat = float(self.fat.get())
+
+        cost, items = optimize(self.df, calories, protein, fat)
+
+        self.output.delete(1.0, tk.END)
+        self.output.insert(tk.END, f"Total Cost: ${cost:.2f}\n\n")
+
+        for name, qty, cost in items:
+            self.output.insert(tk.END, f"{name}: {qty} units (${cost:.2f})\n")
+
+
+# In[11]:
+
+
+# =========================
+# RUN
+# =========================
+root = tk.Tk()
+app = App(root)
+root.mainloop()
+
