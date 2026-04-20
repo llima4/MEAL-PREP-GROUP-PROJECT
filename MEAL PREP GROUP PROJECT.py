@@ -10,10 +10,7 @@ import pandas as pd  # data handling (tables / CSVs)
 import pulp  # linear programming / optimization solver
 import requests  # used for making API calls to fetch prices
 
-# =========================
-# CONFIG
-# =========================
-API_KEY = "YOUR_API_KEY_HERE"  # placeholder for an API key used to fetch prices online
+
 
 # =========================
 # LOAD DATA
@@ -32,42 +29,6 @@ def load_data(filepath):
 
 # In[54]:
 
-
-# =========================
-# INTERNET PRICE FETCHER
-# =========================
-def fetch_price_online(ingredient):
-    """
-    Example using a generic API structure.
-    Replace with real endpoint.
-    """
-    try:
-        url = "https://api.example.com/price"  # placeholder API endpoint
-        headers = {"X-API-Key": API_KEY}  # authentication header
-
-        # send GET request with ingredient name as query parameter
-        response = requests.get(url, headers=headers, params={"query": ingredient})
-
-        # if request is successful
-        if response.status_code == 200:
-            data = response.json()  # parse JSON response
-            return float(data["price"])  # return price from API
-    except:
-        pass  # silently ignore any errors
-
-    return None  # return None if API fails
-
-
-def update_prices(df):
-    # loop through every row in the DataFrame
-    for i in range(len(df)):
-        ingredient = df.loc[i, "Ingredient"]  # get ingredient name
-        new_price = fetch_price_online(ingredient)  # fetch updated price
-
-        if new_price:  # if API returned a valid price
-            df.loc[i, "Avg. Price"] = new_price  # update DataFrame
-
-    return df  # return updated DataFrame
 
 
 # =====================================================
@@ -318,12 +279,7 @@ class App:
             command=self.load_file
         ).pack(pady=5)
 
-        # button to update prices via API
-        ttk.Button(
-            root,
-            text="Update Prices (Internet)",
-            command=self.update_prices_gui
-        ).pack(pady=5)
+
 
         # variable to store selected diet
         self.diet_var = tk.StringVar()
