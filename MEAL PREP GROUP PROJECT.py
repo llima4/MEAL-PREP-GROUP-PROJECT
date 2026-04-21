@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[53]:
+# In[19]:
 
 
 import tkinter as tk  # standard Python GUI library
@@ -27,8 +27,7 @@ def load_data(filepath):
     return df  # return cleaned DataFrame
 
 
-# In[54]:
-
+# In[20]:
 
 
 # =====================================================
@@ -98,120 +97,144 @@ DIETS = {
 }
 
 
-# In[55]:
+# In[24]:
 
 
 # =====================================================
 # OPTIMIZER
 # =====================================================
-def optimize(df, calories, protein, fat, group_mins):
-    prob = pulp.LpProblem("MealPlan", pulp.LpMinimize)  # create minimization problem
 
-    n = len(df)  # number of food items
+def optimize(df, calories, protein, fat, group_mins, preset="Custom"):
 
     # -------------------------------------------------
-    # Decision variables
+    # Apply Vegan / Vegetarian filtering first
     # -------------------------------------------------
-    # number of servings for each food item
+    working_df = df.copy()
+
+    if preset == "Vegan":
+        working_df = working_df[
+            working_df["Vegan"].astype(str).str.lower() == "true"
+        ].reset_index(drop=True)
+
+    elif preset == "Vegetarian":
+        working_df = working_df[
+            working_df["Vegetarian"].astype(str).str.lower() == "true"
+        ].reset_index(drop=True)
+
+    # Replace df after filtering
+    df = working_df
+    n = len(df)
+
+    # If no foods remain after filtering
+    if n == 0:
+        return (
+            "No Feasible Foods",
+            0,
+            [],
+            0,
+            0,
+            0,
+            {}
+        )
+
+    # -------------------------------------------------
+    # NOW create optimization model
+    # -------------------------------------------------
+    prob = pulp.LpProblem("MealPlan", pulp.LpMinimize)
+
+    # servings variables
     x = [
         pulp.LpVariable(f"x{i}", lowBound=0, cat="Integer")
         for i in range(n)
     ]
 
-    # binary variable: whether food i is used or not
+    # distinct food indicators
     y = [
         pulp.LpVariable(f"y{i}", cat="Binary")
         for i in range(n)
     ]
 
-    # slack variables allow violating group constraints with penalty
+    # slack vars
     slack = {
         grp: pulp.LpVariable(f"slack_{grp}", lowBound=0)
         for grp in group_mins
     }
 
-    # -------------------------------------------------
-    # Parameters
-    # -------------------------------------------------
-    PENALTY = 1000      # penalty for violating group constraints
-    BIG_M = 50          # max servings allowed if food is selected
-    MIN_DISTINCT = 15   # minimum number of different foods
+    PENALTY = 1000
+    BIG_M = 50
+    MIN_DISTINCT = 15
 
     # -------------------------------------------------
     # Objective
     # -------------------------------------------------
     prob += (
-        pulp.lpSum(  # minimize total cost
+        pulp.lpSum(
             x[i] * df.loc[i, "Avg. Price"]
             for i in range(n)
         )
         +
-        PENALTY * pulp.lpSum(slack[g] for g in slack)  # penalty for slack usage
+        PENALTY * pulp.lpSum(slack[g] for g in slack)
     )
 
     # -------------------------------------------------
-    # Hard Nutrition Constraints
+    # Nutrition constraints
     # -------------------------------------------------
-    # ensure minimum calories
     prob += pulp.lpSum(
         x[i] * df.loc[i, "Cal"]
         for i in range(n)
     ) >= calories
 
-    # ensure minimum protein
     prob += pulp.lpSum(
         x[i] * df.loc[i, "Protein (g)"]
         for i in range(n)
     ) >= protein
 
-    # ensure fat does not exceed limit
     prob += pulp.lpSum(
         x[i] * df.loc[i, "Fat (g)"]
         for i in range(n)
     ) <= fat
 
     # -------------------------------------------------
-    # Soft Food Group Minimums
+    # Food group constraints
     # -------------------------------------------------
     for grp, minimum in group_mins.items():
         prob += (
-            pulp.lpSum(  # sum servings for that group
+            pulp.lpSum(
                 x[i]
                 for i in range(n)
                 if df.loc[i, "Food Group"] == grp
             )
-            + slack[grp]  # allow violation using slack
+            + slack[grp]
             >= minimum
         )
 
     # -------------------------------------------------
-    # Distinct Foods Constraint
+    # Distinct foods
     # -------------------------------------------------
     for i in range(n):
-        prob += x[i] <= BIG_M * y[i]  # if y=0 then x must be 0
-        prob += x[i] >= y[i]          # if y=1 then x >=1
+        prob += x[i] <= BIG_M * y[i]
+        prob += x[i] >= y[i]
 
-    # enforce minimum number of distinct foods
     prob += pulp.lpSum(y[i] for i in range(n)) >= MIN_DISTINCT
 
     # -------------------------------------------------
     # Solve
     # -------------------------------------------------
-    prob.solve(pulp.PULP_CBC_CMD(msg=0))  # solve using CBC solver
+    prob.solve(pulp.PULP_CBC_CMD(msg=0))
 
-    status = pulp.LpStatus[prob.status]  # get solution status
+    status = pulp.LpStatus[prob.status]
 
     # -------------------------------------------------
     # Build output
     # -------------------------------------------------
-    result = []  # store chosen foods
+    result = []
     total_cost = 0
 
     for i in range(n):
-        val = x[i].value()  # get optimized value
+        val = x[i].value()
 
         if val is not None and val > 0:
-            qty = int(round(val))  # round to integer servings
+            qty = int(round(val))
             cost = qty * df.loc[i, "Avg. Price"]
             total_cost += cost
 
@@ -225,7 +248,6 @@ def optimize(df, calories, protein, fat, group_mins):
                 )
             )
 
-    # compute total nutrition
     total_cal = sum(
         (x[i].value() or 0) * df.loc[i, "Cal"]
         for i in range(n)
@@ -241,7 +263,6 @@ def optimize(df, calories, protein, fat, group_mins):
         for i in range(n)
     )
 
-    # store slack values (how much constraints were violated)
     slack_vals = {
         g: slack[g].value() or 0
         for g in slack
@@ -258,7 +279,7 @@ def optimize(df, calories, protein, fat, group_mins):
     )
 
 
-# In[56]:
+# In[25]:
 
 
 # =====================================================
@@ -414,7 +435,8 @@ class App:
             calories,
             protein,
             fat,
-            group_mins
+            group_mins,
+            preset
         )
 
         # clear previous output
@@ -442,7 +464,7 @@ class App:
             "Ingredient        |Food Group   |Amount  |Unit Type |Cost  |\n"
             "-----------------------------------------------------------|\n"
         )
-        
+
         # print each selected food
         for name, qty, cost, grp, unit in items:
             self.output.insert(
@@ -472,7 +494,7 @@ class App:
         )
 
 
-# In[57]:
+# In[26]:
 
 
 # =========================
@@ -481,3 +503,4 @@ class App:
 root = tk.Tk()  # create main window
 app = App(root)  # initialize app
 root.mainloop()  # start GUI event loop
+
